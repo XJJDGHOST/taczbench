@@ -232,24 +232,28 @@ public final class WorkshopService {
      * @param whenDone 重载完成后在客户端线程执行的回调（用来刷 TACZ 自己的缓存）
      */
     public static void requestReload(Runnable whenDone) {
+        // 逃生开关：config/taczbench/no-autoreload.flag 存在时只写文件、不重载，
+        // 避免某些整合包里 /reload 本身就很慢或死锁。
+        if (Files.exists(configDir().resolve("no-autoreload.flag"))) {
+            TaczBench.LOGGER.info("检测到 no-autoreload.flag，跳过自动重载（退存档生效）");
+            onClient(whenDone);
+            return;
+        }
         MinecraftServer server = server();
         if (server == null) {
             onClient(whenDone);
             return;
         }
         server.execute(() -> {
+            // 只用原版 /reload 这一条路：和你自己在游戏里打 /reload 完全一样。
+            // 之前直接调 PackRepository.reload()/reloadResources() 在这套 187 个 mod 的整合包里会死锁。
             try {
-                server.getPackRepository().reload();   // 让 TACZ 重新扫 tacz/ 目录
+                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "reload");
+                TaczBench.LOGGER.info("已派发 /reload");
             } catch (Throwable t) {
-                TaczBench.LOGGER.warn("重新扫描资源包失败（继续重载）", t);
+                TaczBench.LOGGER.warn("派发 /reload 失败", t);
             }
-            List<String> selected = new ArrayList<>(server.getPackRepository().getSelectedIds());
-            try {
-                server.reloadResources(selected).thenRun(() -> onClient(whenDone));
-            } catch (Throwable t) {
-                TaczBench.LOGGER.warn("重载资源失败", t);
-                onClient(whenDone);
-            }
+            onClient(whenDone);
         });
     }
 

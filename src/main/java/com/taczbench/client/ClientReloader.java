@@ -9,7 +9,7 @@ import net.minecraft.client.Minecraft;
  * <p>
  * 用反射而不是直接 import，是为了「没装 TACZ 也能加载本模组」。
  * <p>
- * 服务端数据重载是异步的，立刻刷新一次可能还是旧数据，所以再排一次 1.5 秒后的刷新。
+ * 服务端数据重载是异步的，立刻刷新一次可能还是旧数据，所以再排一次 5 秒后的刷新。
  */
 public final class ClientReloader {
 
@@ -22,7 +22,7 @@ public final class ClientReloader {
     /** 改完值之后调一次：立刻刷新 + 1.5 秒后再刷一次（等服务端重载落地）。 */
     public static void requestReload() {
         doReload();
-        countdown = 30;
+        countdown = 100;
     }
 
     /** 由客户端 tick 驱动。 */
