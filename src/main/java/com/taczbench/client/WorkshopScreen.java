@@ -831,7 +831,7 @@ public class WorkshopScreen extends Screen {
                             return;
                         }
                         WorkshopService.requestReload(() -> {
-                            ClientReloader.requestReload();
+                            
                             refreshApplied();
                             busy = false;
                             setStatus(Boolean.TRUE.equals(restored) ? "已还原这把枪（含备份回滚）" : "这把枪还没写回过，无需还原", Ui.OK);
@@ -860,7 +860,7 @@ public class WorkshopScreen extends Screen {
                             return;
                         }
                         WorkshopService.requestReload(() -> {
-                            ClientReloader.requestReload();
+                            
                             refreshApplied();
                             pendingApply = false;
                             busy = false;
@@ -1074,7 +1074,7 @@ public class WorkshopScreen extends Screen {
             int n = written == null ? 0 : written;
             setStatus("已写回 " + n + " 个文件，正在重载…", Ui.TEXT_DIM);
             WorkshopService.requestReload(() -> {
-                ClientReloader.requestReload();
+                
                 refreshApplied();
                 pendingApply = false;
                 busy = false;
