@@ -10,6 +10,8 @@ import com.taczbench.core.WorkshopRepository;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.packs.repository.PackRepository;
 import net.minecraft.world.level.storage.LevelResource;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.fml.loading.FMLPaths;
 import net.minecraftforge.server.ServerLifecycleHooks;
 
@@ -181,7 +183,6 @@ public final class WorkshopService {
             TaczBench.LOGGER.info("已写入 {} （备份 {}）", entry.sourceLabel + "/" + entry.entryPath, backup);
         }
         saveManifest();
-        reload();
         return written;
     }
 
@@ -196,7 +197,6 @@ public final class WorkshopService {
             PackPatcher.restore(entry, backup);
         }
         saveManifest();
-        reload();
         return true;
     }
 
@@ -218,7 +218,6 @@ public final class WorkshopService {
         if (world != null) {
             OverlayWriter.clear(world);
         }
-        reload();
         return n;
     }
 
@@ -226,24 +225,40 @@ public final class WorkshopService {
         return new ArrayList<>(APPLIED.keySet());
     }
 
-    /** 保证枪包被重新扫描，然后重载数据包。 */
-    private static void reload() {
+    /**
+     * 重新扫描枪包 + 重载资源，全部丢到服务端线程执行（绝对不能在渲染线程直接调，
+     * 会和服务端线程互相等死，表现就是游戏未响应）。
+     *
+     * @param whenDone 重载完成后在客户端线程执行的回调（用来刷 TACZ 自己的缓存）
+     */
+    public static void requestReload(Runnable whenDone) {
         MinecraftServer server = server();
         if (server == null) {
+            onClient(whenDone);
             return;
         }
-        PackRepository repo = server.getPackRepository();
-        try {
-            repo.reload();   // 让 TACZ 重新扫 tacz/ 目录
-        } catch (Throwable t) {
-            TaczBench.LOGGER.warn("重新扫描资源包失败（继续尝试重载）", t);
+        server.execute(() -> {
+            try {
+                server.getPackRepository().reload();   // 让 TACZ 重新扫 tacz/ 目录
+            } catch (Throwable t) {
+                TaczBench.LOGGER.warn("重新扫描资源包失败（继续重载）", t);
+            }
+            List<String> selected = new ArrayList<>(server.getPackRepository().getSelectedIds());
+            try {
+                server.reloadResources(selected).thenRun(() -> onClient(whenDone));
+            } catch (Throwable t) {
+                TaczBench.LOGGER.warn("重载资源失败", t);
+                onClient(whenDone);
+            }
+        });
+    }
+
+    private static void onClient(Runnable r) {
+        if (r == null) {
+            return;
         }
-        List<String> selected = new ArrayList<>(repo.getSelectedIds());
-        try {
-            server.reloadResources(selected);
-        } catch (Throwable t) {
-            TaczBench.LOGGER.warn("重载资源失败", t);
-        }
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
+                () -> () -> net.minecraft.client.Minecraft.getInstance().execute(r));
     }
 
     public static Map<GunEntry, String> buildFiles(Map<String, Map<String, String>> edits, WorkshopRepository repo) {

@@ -9,6 +9,7 @@ import com.taczbench.core.JsonNode;
 import com.taczbench.core.Schema;
 import com.taczbench.core.Stats;
 import com.taczbench.core.WorkshopRepository;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -20,12 +21,15 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.lwjgl.glfw.GLFW;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 /**
  * 调校台主界面。
@@ -67,6 +71,7 @@ public class WorkshopScreen extends Screen {
 
     private int listScroll;
     private int fieldScroll;
+    private boolean busy;
     private boolean dragging;
     private String dragPath;
 
@@ -808,29 +813,60 @@ public class WorkshopScreen extends Screen {
                 case RESET_GUN -> {
                     edits.clear();
                     cacheDirty = true;
-                    try {
-                        boolean restored = WorkshopService.restoreOne(selected.key());
-                        ClientReloader.requestReload();
-                        refreshApplied();
-                        setStatus(restored ? "已还原这把枪（含备份回滚）" : "这把枪还没写回过，无需还原", Ui.OK);
-                    } catch (Exception e) {
-                        setStatus("内存改动已清，但回滚失败：" + e.getMessage(), Ui.DANGER);
+                    if (busy) {
+                        return true;
                     }
+                    busy = true;
+                    String key = selected.key();
+                    CompletableFuture.supplyAsync(() -> {
+                        try {
+                            return WorkshopService.restoreOne(key);
+                        } catch (IOException e) {
+                            throw new CompletionException(e);
+                        }
+                    }).whenComplete((restored, err) -> Minecraft.getInstance().execute(() -> {
+                        if (err != null) {
+                            busy = false;
+                            setStatus("回滚失败：" + err.getMessage(), Ui.DANGER);
+                            return;
+                        }
+                        WorkshopService.requestReload(() -> {
+                            ClientReloader.requestReload();
+                            refreshApplied();
+                            busy = false;
+                            setStatus(Boolean.TRUE.equals(restored) ? "已还原这把枪（含备份回滚）" : "这把枪还没写回过，无需还原", Ui.OK);
+                        });
+                    }));
                     return true;
                 }
                 case RESET_ALL -> {
                     EDITS.clear();
                     edits.clear();
                     cacheDirty = true;
-                    pendingApply = false;
-                    try {
-                        int n = WorkshopService.restoreAll();
-                        ClientReloader.requestReload();
-                        refreshApplied();
-                        setStatus("已全部还原（回滚 " + n + " 个文件）", Ui.OK);
-                    } catch (Exception e) {
-                        setStatus("还原失败：" + e.getMessage(), Ui.DANGER);
+                    if (busy) {
+                        return true;
                     }
+                    busy = true;
+                    CompletableFuture.supplyAsync(() -> {
+                        try {
+                            return WorkshopService.restoreAll();
+                        } catch (IOException e) {
+                            throw new CompletionException(e);
+                        }
+                    }).whenComplete((count, err) -> Minecraft.getInstance().execute(() -> {
+                        if (err != null) {
+                            busy = false;
+                            setStatus("还原失败：" + err.getMessage(), Ui.DANGER);
+                            return;
+                        }
+                        WorkshopService.requestReload(() -> {
+                            ClientReloader.requestReload();
+                            refreshApplied();
+                            pendingApply = false;
+                            busy = false;
+                            setStatus("已全部还原（回滚 " + (count == null ? 0 : count) + " 个文件）", Ui.OK);
+                        });
+                    }));
                     return true;
                 }
                 case RESCAN -> {
@@ -1012,17 +1048,39 @@ public class WorkshopScreen extends Screen {
     }
 
     private void applyAll() {
-        try {
-            Map<GunEntry, String> files = WorkshopService.buildFiles(EDITS, repo);
-            int written = WorkshopService.apply(files);
-            ClientReloader.requestReload();
-            refreshApplied();
-            pendingApply = false;
-            setStatus("已写回 " + written + " 个枪包文件（已备份），正在重载；数值没变就退出存档再进一次", Ui.OK);
-        } catch (Exception e) {
-            TaczBench.LOGGER.warn("应用失败", e);
-            setStatus("应用失败：" + e.getMessage(), Ui.DANGER);
+        if (busy) {
+            return;
         }
+        Map<GunEntry, String> files = WorkshopService.buildFiles(EDITS, repo);
+        if (files.isEmpty()) {
+            setStatus("没有改动", Ui.TEXT_DIM);
+            return;
+        }
+        busy = true;
+        setStatus("正在写入枪包…", Ui.TEXT_DIM);
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return WorkshopService.apply(files);
+            } catch (IOException e) {
+                throw new CompletionException(e);
+            }
+        }).whenComplete((written, err) -> Minecraft.getInstance().execute(() -> {
+            if (err != null) {
+                busy = false;
+                TaczBench.LOGGER.warn("应用失败", err);
+                setStatus("写入失败：" + err.getMessage(), Ui.DANGER);
+                return;
+            }
+            int n = written == null ? 0 : written;
+            setStatus("已写回 " + n + " 个文件，正在重载…", Ui.TEXT_DIM);
+            WorkshopService.requestReload(() -> {
+                ClientReloader.requestReload();
+                refreshApplied();
+                pendingApply = false;
+                busy = false;
+                setStatus("已生效（写回 " + n + " 个文件），直接开打试试", Ui.OK);
+            });
+        }));
     }
 
     private void doRescan() {
