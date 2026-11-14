@@ -810,6 +810,7 @@ public class WorkshopScreen extends Screen {
                     cacheDirty = true;
                     try {
                         boolean restored = WorkshopService.restoreOne(selected.key());
+                        ClientReloader.requestReload();
                         refreshApplied();
                         setStatus(restored ? "已还原这把枪（含备份回滚）" : "这把枪还没写回过，无需还原", Ui.OK);
                     } catch (Exception e) {
@@ -824,6 +825,7 @@ public class WorkshopScreen extends Screen {
                     pendingApply = false;
                     try {
                         int n = WorkshopService.restoreAll();
+                        ClientReloader.requestReload();
                         refreshApplied();
                         setStatus("已全部还原（回滚 " + n + " 个文件）", Ui.OK);
                     } catch (Exception e) {
@@ -1013,6 +1015,7 @@ public class WorkshopScreen extends Screen {
         try {
             Map<GunEntry, String> files = WorkshopService.buildFiles(EDITS, repo);
             int written = WorkshopService.apply(files);
+            ClientReloader.requestReload();
             refreshApplied();
             pendingApply = false;
             setStatus("已写回 " + written + " 个枪包文件（已备份），正在重载；数值没变就退出存档再进一次", Ui.OK);

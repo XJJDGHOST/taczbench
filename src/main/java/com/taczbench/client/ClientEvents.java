@@ -19,6 +19,7 @@ public final class ClientEvents {
         if (event.phase != TickEvent.Phase.END) {
             return;
         }
+        ClientReloader.tick();
         Minecraft mc = Minecraft.getInstance();
         while (TaczBenchClient.OPEN_WORKSHOP.consumeClick()) {
             if (mc.screen == null && mc.player != null) {
