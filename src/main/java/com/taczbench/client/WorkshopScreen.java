@@ -551,13 +551,15 @@ public class WorkshopScreen extends Screen {
         }
         int y = py0 + 45;
         int x = fieldX0;
-        String[][] cells = {
-                {"单发", fmt(s.damagePerShot)},
-                {"爆头", fmt(s.headshotDamage)},
-                {"DPS", fmt(s.dps)},
-                {"打空弹匣", fmt(s.magDumpSeconds) + "s"},
-                {"击杀 20 血", fmt(s.ttkSeconds) + "s"},
-        };
+        List<String[]> cells = new ArrayList<>();
+        cells.add(new String[]{"单发", fmt(s.damagePerShot)});
+        if (s.damagePerPellet < s.damagePerShot - 1.0E-6) {
+            cells.add(new String[]{"每颗", fmt(s.damagePerPellet)});
+        }
+        cells.add(new String[]{"爆头", fmt(s.headshotDamage)});
+        cells.add(new String[]{"DPS", fmt(s.dps)});
+        cells.add(new String[]{"打空弹匣", fmt(s.magDumpSeconds) + "s"});
+        cells.add(new String[]{"击杀 20 血", fmt(s.ttkSeconds) + "s"});
         for (String[] cell : cells) {
             g.fill(x, y, x + 76, y + 24, 0x22FFFFFF);
             Ui.text(g, this.font, cell[0], x + 6, y + 3, Ui.TEXT_FAINT);

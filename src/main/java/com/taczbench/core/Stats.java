@@ -4,6 +4,7 @@ package com.taczbench.core;
 public final class Stats {
 
     public final double damagePerShot;
+    public final double damagePerPellet;
     public final double headshotDamage;
     public final double dps;
     public final double sustainedDps;
@@ -12,9 +13,10 @@ public final class Stats {
     public final int shotsToKill;
     public final int rpm;
 
-    private Stats(double damagePerShot, double headshotDamage, double dps, double sustainedDps,
+    private Stats(double damagePerShot, double damagePerPellet, double headshotDamage, double dps, double sustainedDps,
                   double magDumpSeconds, double ttkSeconds, int shotsToKill, int rpm) {
         this.damagePerShot = damagePerShot;
+        this.damagePerPellet = damagePerPellet;
         this.headshotDamage = headshotDamage;
         this.dps = dps;
         this.sustainedDps = sustainedDps;
@@ -36,7 +38,10 @@ public final class Stats {
             }
         }
         int pellets = Math.max(1, (int) Math.round(number(root, "bullet.bullet_amount", 1)));
-        double perShot = base * pellets;
+        // TACZ 的 EntityKineticBullet: damageModifier = 1f / bulletCount
+        // 也就是说表里的伤害是「一次射击的总量」，每颗弹丸只有 1/弹丸数
+        double perShot = base;
+        double perPellet = pellets > 0 ? base / pellets : base;
         double headMul = number(root, "bullet.extra_damage.head_shot_multiplier", 1);
         int rpm = Math.max(0, (int) Math.round(number(root, "rpm", 0)));
         int mag = Math.max(0, (int) Math.round(number(root, "ammo_amount", 0)));
@@ -49,7 +54,7 @@ public final class Stats {
         int shots = perShot <= 0 ? 0 : (int) Math.ceil(targetHealth / perShot);
         double ttk = (shots <= 1 || rpm <= 0) ? 0 : (shots - 1) * 60.0D / rpm;
 
-        return new Stats(perShot, perShot * headMul, dps, sustained, dump, ttk, shots, rpm);
+        return new Stats(perShot, perPellet, perShot * headMul, dps, sustained, dump, ttk, shots, rpm);
     }
 
     public static Stats compute(JsonNode root) {
