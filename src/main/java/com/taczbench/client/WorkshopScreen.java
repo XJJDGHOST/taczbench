@@ -12,11 +12,17 @@ import com.taczbench.core.WorkshopRepository;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraftforge.registries.ForgeRegistries;
 import org.lwjgl.glfw.GLFW;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,6 +62,7 @@ public class WorkshopScreen extends Screen {
 
     private final List<Hit> hits = new ArrayList<>();
     private final List<Row> rows = new ArrayList<>();
+    private final Map<String, ItemStack> iconCache = new HashMap<>();
     private int fieldContentHeight;
 
     private int listScroll;
@@ -337,7 +344,7 @@ public class WorkshopScreen extends Screen {
         String sub = "枪械数据可视化调整 · 覆盖式写入，不动原枪包";
         Ui.text(g, this.font, sub, px0 + 10 + this.font.width("TaCZ 调校台") + 10, py0 + 10, Ui.TEXT_FAINT);
 
-        String right = "覆盖层 " + appliedCache.size() + " 个文件";
+        String right = "已写回 " + appliedCache.size() + " 把枪";
         Ui.text(g, this.font, right, px1 - 10 - this.font.width(right), py0 + 10, Ui.TEXT_DIM);
         Ui.hLine(g, px0 + 6, px1 - 6, py0 + 24, Ui.BORDER_SOFT);
     }
@@ -397,7 +404,18 @@ public class WorkshopScreen extends Screen {
                 g.fill(listX0 + 2, y, listX1 - 2, y + rowH, Ui.ROW_HOVER);
             }
             String name = Ui.trim(this.font, displayName(e), listX1 - listX0 - 44);
-            Ui.text(g, this.font, name, listX0 + 10, y + 6, e.equals(selected) ? Ui.TEXT : 0xFFC7CCD2);
+            ItemStack icon = iconFor(e);
+            int textX = listX0 + 10;
+            if (!icon.isEmpty()) {
+                try {
+                    g.renderItem(icon, listX0 + 6, y + 2);
+                } catch (Throwable ignored) {
+                    // 渲染失败就退化成纯文字
+                }
+                textX = listX0 + 27;
+                name = Ui.trim(this.font, displayName(e), listX1 - textX - 30);
+            }
+            Ui.text(g, this.font, name, textX, y + 6, e.equals(selected) ? Ui.TEXT : 0xFFC7CCD2);
             String type = typeLabel(e.type);
             if (!type.isEmpty()) {
                 Ui.text(g, this.font, type, listX1 - 8 - this.font.width(type), y + 6, Ui.TEXT_FAINT);
@@ -627,13 +645,13 @@ public class WorkshopScreen extends Screen {
         y += 8;
         Ui.text(g, this.font, "已改枪械 " + countEditedEntries() + " 把", x, y, Ui.TEXT_DIM);
         y += 11;
-        Ui.text(g, this.font, "覆盖文件 " + appliedCache.size() + " 个", x, y, Ui.TEXT_DIM);
+        Ui.text(g, this.font, "已写回 " + appliedCache.size() + " 把", x, y, Ui.TEXT_DIM);
         y += 15;
 
         Ui.text(g, this.font, "说明", x, y, Ui.ACCENT);
         y += 12;
-        y = paragraph(g, x, y, w, "改动写进存档的 datapacks/taczbench_overlay，不动原枪包。");
-        y = paragraph(g, x, y, w, "删掉那个文件夹，全部数值立刻还原。");
+        y = paragraph(g, x, y, w, "改动直接写回枪包文件，改之前整份备份。");
+        y = paragraph(g, x, y, w, "点「全部还原」按备份回滚。");
         y = paragraph(g, x, y, w, "拖动滑条调整，点数值可直接输入，Shift 拖动微调。");
 
         if (WorkshopService.worldDir() == null) {
@@ -753,12 +771,11 @@ public class WorkshopScreen extends Screen {
                     edits.clear();
                     cacheDirty = true;
                     try {
-                        // 同时把覆盖层里这把枪的文件删掉，否则游戏里还是改过的数值
-                        WorkshopService.apply(WorkshopService.buildFiles(EDITS, repo));
+                        boolean restored = WorkshopService.restoreOne(selected.key());
                         refreshApplied();
-                        setStatus("已撤销这把枪的改动（含覆盖层）", Ui.OK);
+                        setStatus(restored ? "已还原这把枪（含备份回滚）" : "这把枪还没写回过，无需还原", Ui.OK);
                     } catch (Exception e) {
-                        setStatus("已撤销内存改动，但覆盖层没更新：" + e.getMessage(), Ui.DANGER);
+                        setStatus("内存改动已清，但回滚失败：" + e.getMessage(), Ui.DANGER);
                     }
                     return true;
                 }
@@ -768,9 +785,9 @@ public class WorkshopScreen extends Screen {
                     cacheDirty = true;
                     pendingApply = false;
                     try {
-                        WorkshopService.clearAll();
+                        int n = WorkshopService.restoreAll();
                         refreshApplied();
-                        setStatus("覆盖层已清空，数值全部还原", Ui.OK);
+                        setStatus("已全部还原（回滚 " + n + " 个文件）", Ui.OK);
                     } catch (Exception e) {
                         setStatus("还原失败：" + e.getMessage(), Ui.DANGER);
                     }
@@ -956,11 +973,11 @@ public class WorkshopScreen extends Screen {
 
     private void applyAll() {
         try {
-            Map<String, String> files = WorkshopService.buildFiles(EDITS, repo);
+            Map<GunEntry, String> files = WorkshopService.buildFiles(EDITS, repo);
             int written = WorkshopService.apply(files);
             refreshApplied();
             pendingApply = false;
-            setStatus("已写入 " + files.size() + " 个文件（其中新写 " + written + " 个），正在重载数据包…", Ui.OK);
+            setStatus("已写回 " + written + " 个枪包文件（已备份），正在重载；数值没变就退出存档再进一次", Ui.OK);
         } catch (Exception e) {
             TaczBench.LOGGER.warn("应用失败", e);
             setStatus("应用失败：" + e.getMessage(), Ui.DANGER);
@@ -1023,6 +1040,28 @@ public class WorkshopScreen extends Screen {
             }
         }
         return e.idWithoutSuffix();
+    }
+
+    /** 拿枪的真实物品图标（和物品栏里那个一模一样）。 */
+    private ItemStack iconFor(GunEntry e) {
+        if (iconCache.containsKey(e.key())) {
+            return iconCache.get(e.key());
+        }
+        ItemStack stack = ItemStack.EMPTY;
+        try {
+            String itemPath = e.isGun() ? "modern_kinetic_gun" : "attachment";
+            Item item = ForgeRegistries.ITEMS.getValue(new ResourceLocation("tacz", itemPath));
+            if (item != null) {
+                stack = new ItemStack(item);
+                CompoundTag tag = stack.getOrCreateTag();
+                String id = e.namespace + ":" + e.idWithoutSuffix();
+                tag.putString(e.isGun() ? "GunId" : "AttachmentId", id);
+            }
+        } catch (Throwable t) {
+            stack = ItemStack.EMPTY;
+        }
+        iconCache.put(e.key(), stack);
+        return stack;
     }
 
     private String typeLabel(String type) {

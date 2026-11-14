@@ -13,12 +13,15 @@ public final class GunEntry {
     public final String nameKey;     // 本地化键，如 tacz.gun.ak47.name
     public final String type;        // rifle / pistol / ...
     public final String rawText;     // 原始文本（含注释）
+    public final java.nio.file.Path packPath;  // 枪包在磁盘上的位置（目录或 zip）
+    public final String packKind;    // dir / zip
 
     private JsonDoc doc;
     private JsonDoc original;
 
     public GunEntry(String kind, String namespace, String id, String entryPath, String sourceLabel,
-                    String nameKey, String type, String rawText) {
+                    String nameKey, String type, String rawText,
+                    java.nio.file.Path packPath, String packKind) {
         this.kind = kind;
         this.namespace = namespace;
         this.id = id;
@@ -27,6 +30,8 @@ public final class GunEntry {
         this.nameKey = nameKey;
         this.type = type == null ? "" : type;
         this.rawText = rawText;
+        this.packPath = packPath;
+        this.packKind = packKind;
     }
 
     public String key() {

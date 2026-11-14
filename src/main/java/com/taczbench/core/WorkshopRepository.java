@@ -53,8 +53,7 @@ public final class WorkshopRepository {
         }
     }
 
-    private void scanZip(String label, Path path) throws IOException {
-        Map<String, String> dataFiles = new LinkedHashMap<>();
+    private void scanZip(String label, Path path) throws IOException {        Map<String, String> dataFiles = new LinkedHashMap<>();
         Map<String, String> indexFiles = new LinkedHashMap<>();
         try (ZipFile zip = new ZipFile(path.toFile())) {
             var entries = zip.entries();
@@ -77,7 +76,7 @@ public final class WorkshopRepository {
                 }
             }
         }
-        ingest(label, dataFiles, indexFiles);
+        ingest(label, path, "zip", dataFiles, indexFiles);
     }
 
     private void scanDirectory(String label, Path root) throws IOException {
@@ -96,10 +95,11 @@ public final class WorkshopRepository {
                 }
             }
         }
-        ingest(label, dataFiles, indexFiles);
+        ingest(label, root, "dir", dataFiles, indexFiles);
     }
 
-    private void ingest(String label, Map<String, String> dataFiles, Map<String, String> indexFiles) {
+    private void ingest(String label, Path packPath, String packKind,
+                        Map<String, String> dataFiles, Map<String, String> indexFiles) {
         for (Map.Entry<String, String> e : dataFiles.entrySet()) {
             Matcher m = DATA_PATH.matcher(e.getKey());
             if (!m.matches()) {
@@ -125,7 +125,8 @@ public final class WorkshopRepository {
                     warnings.add(label + " 的 " + indexKey + " 解析失败: " + ex.getMessage());
                 }
             }
-            GunEntry entry = new GunEntry(kind, ns, file, e.getKey(), label, nameKey, type, e.getValue());
+            GunEntry entry = new GunEntry(kind, ns, file, e.getKey(), label, nameKey, type, e.getValue(),
+                    packPath.toAbsolutePath(), packKind);
             // 后扫描的覆盖先扫描的，和游戏内资源优先级一致
             byKey.remove(entry.key());
             byKey.put(entry.key(), entry);

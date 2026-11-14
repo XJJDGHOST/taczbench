@@ -21,7 +21,8 @@ public final class TaczBench {
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public TaczBench() {
-        LOGGER.info("TaCZ Bench 已加载：枪械数据只读扫描 + 覆盖式改写");
+        WorkshopService.loadManifest();
+        LOGGER.info("TaCZ Bench 已加载：枪械数据只读扫描 + 备份式改写");
     }
 
     @SubscribeEvent
