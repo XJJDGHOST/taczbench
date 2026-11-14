@@ -1,0 +1,28 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="${mod_license}"
+
+[[mods]]
+modId="taczbench"
+version="${mod_version}"
+displayName="TaCZ Bench · 永恒枪械工坊调校台"
+authors="TaCZ Bench"
+description='''
+在游戏里直接改永恒枪械工坊（TaCZ）的枪械数据：伤害、射速、后坐、散布、弹匣、重量……
+改动以「覆盖数据包」的形式写进存档，不动原枪包，随时可以整体还原。
+不依赖 TACZ 的任何内部类，1.1.x / 1.2.x 的任意枪包都能读。
+'''
+
+[[dependencies.taczbench]]
+    modId="forge"
+    mandatory=true
+    versionRange="[47,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.taczbench]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="[1.20.1,1.21)"
+    ordering="NONE"
+    side="BOTH"
