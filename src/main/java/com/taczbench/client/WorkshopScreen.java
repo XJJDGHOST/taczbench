@@ -311,11 +311,47 @@ public class WorkshopScreen extends Screen {
 
     private void setNumber(String path, double v) {
         setLiteral(path, JsonDoc.numberLiteral(v));
+        if ("bullet.damage".equals(path)) {
+            scaleFalloff(v);
+        }
+    }
+
+    /**
+     * TACZ 只要存在 damage_adjust，实际伤害就完全取自那张表。
+     * 所以改「基础伤害」时，把整张表按同比例一起改，玩家看到的效果才对得上。
+     */
+    private void scaleFalloff(double newBase) {
+        JsonNode table = node("bullet.extra_damage.damage_adjust");
+        if (table == null || !table.isArray() || table.size() == 0) {
+            return;
+        }
+        JsonNode first = table.item(0).member("damage");
+        if (first == null || first.asDouble() <= 0) {
+            return;
+        }
+        double base = first.asDouble();
+        for (int i = 0; i < table.size(); i++) {
+            JsonNode d = table.item(i).member("damage");
+            if (d == null) {
+                continue;
+            }
+            double v = newBase * (d.asDouble() / base);
+            edits.put("bullet.extra_damage.damage_adjust[" + i + "].damage",
+                    JsonDoc.numberLiteral(Math.round(v * 100.0) / 100.0));
+        }
+        cacheDirty = true;
     }
 
     private void reset(String path) {
         if (edits.remove(path) != null) {
             pendingApply = true;
+        }
+        if ("bullet.damage".equals(path)) {
+            for (String key : new ArrayList<>(edits.keySet())) {
+                if (key.startsWith("bullet.extra_damage.damage_adjust[")) {
+                    edits.remove(key);
+                }
+            }
         }
         cacheDirty = true;
     }

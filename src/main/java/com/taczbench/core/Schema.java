@@ -92,7 +92,8 @@ public final class Schema {
         List<Group> list = new ArrayList<>();
 
         Group bullet = new Group("bullet", "伤害与弹道", "guns");
-        bullet.add(FieldSpec.num("bullet.damage", "基础伤害", 0, 500, 0.5, "点", "子弹命中时的基础伤害，护甲计算前"));
+        bullet.add(FieldSpec.num("bullet.damage", "基础伤害", 0, 500, 0.5, "点",
+                "没有距离衰减表时用这个值；有表时改它会把整张表按比例一起改"));
         bullet.add(FieldSpec.integer("bullet.bullet_amount", "弹丸数量", 1, 64, "颗", "霰弹枪用，每发的伤害会被这个数平均分配"));
         bullet.add(FieldSpec.num("bullet.extra_damage.armor_ignore", "护甲穿透率", 0, 1, 0.05, "", "0 表示完全被护甲抵消，1 表示无视护甲"));
         bullet.add(FieldSpec.num("bullet.extra_damage.head_shot_multiplier", "爆头倍率", 1, 10, 0.1, "×", "命中头部时的伤害倍率"));
@@ -105,6 +106,16 @@ public final class Schema {
         bullet.add(FieldSpec.integer("bullet.tracer_count_interval", "曳光弹间隔", 0, 20, "发", "每几发出现一颗曳光弹，0 表示每发都是"));
         bullet.add(FieldSpec.bool("allow_ammo_unload", "允许快速卸弹", "能否用快捷键把弹匣里的子弹退出来"));
         list.add(bullet);
+
+        // TACZ 的 DamageModifier 里：只要存在 damage_adjust，bullet.damage 就不参与伤害计算，
+        // 实际每发伤害完全照这张「距离 → 伤害」表来。所以必须能改它。
+        Group falloff = new Group("falloff", "距离衰减（这张表才是实际伤害）", "guns");
+        falloff.add(FieldSpec.num("bullet.extra_damage.damage_adjust[0].damage", "近距离伤害", 0, 500, 0.5, "点",
+                "第一档距离内的实际每发伤害，改「基础伤害」会按比例同步这里"));
+        falloff.add(FieldSpec.num("bullet.extra_damage.damage_adjust[1].damage", "中距离伤害", 0, 500, 0.5, "点", "第二档距离"));
+        falloff.add(FieldSpec.num("bullet.extra_damage.damage_adjust[2].damage", "远距离伤害", 0, 500, 0.5, "点", "第三档距离"));
+        falloff.add(FieldSpec.num("bullet.extra_damage.damage_adjust[3].damage", "更远伤害", 0, 500, 0.5, "点", "第 4 档（大部分枪只有 3 档）"));
+        list.add(falloff);
 
         Group fire = new Group("fire", "射速与动作", "guns");
         fire.add(FieldSpec.integer("rpm", "射速", 1, 1200, "发/分", "每分钟射出的弹药量，TACZ 上限 1200"));

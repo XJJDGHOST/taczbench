@@ -26,7 +26,15 @@ public final class Stats {
 
     /** @param targetHealth 目标血量，MC 玩家是 20。 */
     public static Stats compute(JsonNode root, double targetHealth) {
+        // TACZ：只要有距离衰减表，bullet.damage 就不参与计算，实际伤害完全取自这张表
         double base = number(root, "bullet.damage", 0);
+        JsonNode table = root.at("bullet.extra_damage.damage_adjust");
+        if (table != null && table.isArray() && table.size() > 0) {
+            JsonNode first = table.item(0).member("damage");
+            if (first != null) {
+                base = first.asDouble();
+            }
+        }
         int pellets = Math.max(1, (int) Math.round(number(root, "bullet.bullet_amount", 1)));
         double perShot = base * pellets;
         double headMul = number(root, "bullet.extra_damage.head_shot_multiplier", 1);

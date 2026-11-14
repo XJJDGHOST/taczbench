@@ -256,9 +256,49 @@ public final class WorkshopService {
             if (entry == null) {
                 continue;
             }
-            files.put(entry, entry.originalDoc().render(e.getValue()));
+            files.put(entry, entry.originalDoc().render(expandFalloff(entry, e.getValue())));
         }
         return files;
+    }
+
+    /**
+     * 兜底：如果调用方只改了 bullet.damage，而有距离衰减表，按表的比例把表一起改
+     * （界面里已经实时算好并放进 edits 了，这里是给命令行走同一个逻辑）。
+     */
+    private static Map<String, String> expandFalloff(GunEntry entry, Map<String, String> edits) {
+        String base = edits.get("bullet.damage");
+        if (base == null) {
+            return edits;
+        }
+        JsonNode table = entry.originalDoc().at("bullet.extra_damage.damage_adjust");
+        if (table == null || !table.isArray() || table.size() == 0) {
+            return edits;
+        }
+        JsonNode first = table.item(0).member("damage");
+        if (first == null || first.asDouble() <= 0) {
+            return edits;
+        }
+        double newBase;
+        try {
+            newBase = Double.parseDouble(base);
+        } catch (NumberFormatException ex) {
+            return edits;
+        }
+        Map<String, String> out = new LinkedHashMap<>(edits);
+        double ref = first.asDouble();
+        for (int i = 0; i < table.size(); i++) {
+            JsonNode d = table.item(i).member("damage");
+            if (d == null) {
+                continue;
+            }
+            String p = "bullet.extra_damage.damage_adjust[" + i + "].damage";
+            if (out.containsKey(p)) {
+                continue;
+            }
+            double v = newBase * (d.asDouble() / ref);
+            out.put(p, JsonDoc.numberLiteral(Math.round(v * 100.0) / 100.0));
+        }
+        return out;
     }
 
     public static GunEntry findByKey(WorkshopRepository repo, String key) {
